@@ -1,0 +1,18 @@
+[Unit]
+Description=bridge-echo — HTTP bridge for Claude Code CLI
+After=network.target
+
+[Service]
+Type=simple
+User=echo
+WorkingDirectory=/home/echo
+ExecStart=/usr/local/bin/bridge-echo
+Environment=RUST_LOG=bridge_echo=info
+Environment=BRIDGE_ECHO_SELF_PATH=/home/echo/SELF.md
+Environment=BRIDGE_ECHO_HOME=/home/echo
+Environment=PATH=/home/echo/.local/bin:/usr/local/bin:/usr/bin:/bin
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
