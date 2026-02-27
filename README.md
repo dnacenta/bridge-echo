@@ -2,6 +2,7 @@
 
 [![License: MIT](https://img.shields.io/github/license/dnacenta/bridge-echo)](LICENSE)
 [![Version](https://img.shields.io/github/v/tag/dnacenta/bridge-echo?label=version&color=green)](https://github.com/dnacenta/bridge-echo/tags)
+[![Crates.io](https://img.shields.io/crates/v/bridge-echo)](https://crates.io/crates/bridge-echo)
 
 HTTP bridge for Claude Code CLI. Lets external services talk to Claude Code over HTTP — send a message, get a response.
 
@@ -75,7 +76,7 @@ Channel-to-trust mappings live in `src/trust.rs`. Edit them to match your setup 
 ### cargo install (recommended)
 
 ```bash
-cargo install --path .
+cargo install bridge-echo
 ```
 
 ### Prebuilt binaries
