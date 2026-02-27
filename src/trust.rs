@@ -8,7 +8,7 @@ pub enum TrustLevel {
 pub fn channel_trust(channel: &str) -> TrustLevel {
     match channel {
         "reflection" | "system" => TrustLevel::Trusted,
-        "slack" | "slack-echo" | "discord" | "discord-echo" => TrustLevel::Verified,
+        "discord" | "discord-echo" | "voice" => TrustLevel::Verified,
         _ => TrustLevel::Untrusted,
     }
 }
@@ -47,10 +47,9 @@ mod tests {
 
     #[test]
     fn verified_channels() {
-        assert_eq!(channel_trust("slack"), TrustLevel::Verified);
-        assert_eq!(channel_trust("slack-echo"), TrustLevel::Verified);
         assert_eq!(channel_trust("discord"), TrustLevel::Verified);
         assert_eq!(channel_trust("discord-echo"), TrustLevel::Verified);
+        assert_eq!(channel_trust("voice"), TrustLevel::Verified);
     }
 
     #[test]

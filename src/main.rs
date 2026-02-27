@@ -5,11 +5,12 @@ mod handlers;
 mod injection;
 mod monitor_cli;
 mod prompt;
+mod queue;
 mod router;
-mod session;
 mod state;
 mod tracker;
 mod trust;
+mod voice_session;
 
 use config::Config;
 use state::AppState;

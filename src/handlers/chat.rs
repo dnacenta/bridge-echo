@@ -5,14 +5,32 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 
-use crate::claude;
 use crate::prompt;
+use crate::queue::QueuedRequest;
 use crate::state::AppState;
 
 #[derive(Deserialize)]
 pub struct ChatRequest {
     pub message: Option<String>,
     pub channel: Option<String>,
+    pub sender: Option<String>,
+    pub metadata: Option<RequestMetadata>,
+    pub callback: Option<CallbackConfig>,
+}
+
+#[derive(Deserialize, Clone, Default)]
+pub struct RequestMetadata {
+    pub call_sid: Option<String>,
+    pub discord_channel_id: Option<String>,
+    pub workflow_id: Option<String>,
+    pub context: Option<String>,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct CallbackConfig {
+    #[serde(rename = "type")]
+    pub callback_type: String,
+    pub url: Option<String>,
 }
 
 pub async fn chat(
@@ -29,54 +47,74 @@ pub async fn chat(
         }
     };
 
-    let channel = body.channel.unwrap_or_else(|| "slack".into());
+    let channel = body.channel.unwrap_or_else(|| "discord".into());
 
-    let truncated = if message.len() > 120 {
-        format!("{}...", &message[..120])
-    } else {
-        message.clone()
-    };
+    let truncated = truncate_str(&message, 120);
     info!("[{channel}] Received: {truncated}");
-
-    state.sessions.cleanup().await;
-
-    let final_prompt = prompt::build(&message, &channel, &state.detector);
 
     if state.detector.detect(&message) {
         warn!("[{channel}] INJECTION DETECTED in message");
     }
 
-    let session_id = state.sessions.get(&channel).await;
+    let sender = body.sender.unwrap_or_else(|| match channel.as_str() {
+        "discord" | "discord-echo" => "D".into(),
+        "voice" => "D".into(),
+        _ => "unknown".into(),
+    });
+    let metadata = body.metadata.unwrap_or_default();
+    let callback = body.callback;
 
-    let self_doc = state
-        .config
-        .self_path
-        .as_deref()
-        .and_then(|path| std::fs::read_to_string(path).ok());
+    let mut final_prompt = prompt::build(&message, &channel, &state.detector);
 
-    let request_id = state.tracker.start(&channel, &message).await;
-
-    let response = claude::invoke(
-        &state.config.claude_bin,
-        &final_prompt,
-        &state.config.home,
-        session_id.as_deref(),
-        self_doc.as_deref(),
-    )
-    .await;
-
-    state.tracker.complete(request_id, &response.text).await;
-
-    if let Some(sid) = &response.session_id {
-        state.sessions.set(&channel, sid.clone()).await;
+    if let Some(ctx) = &metadata.context {
+        final_prompt = format!("{final_prompt}\n\n[Context: {ctx}]");
     }
 
-    let resp_truncated = if response.text.len() > 120 {
-        format!("{}...", &response.text[..120])
-    } else {
-        response.text.clone()
-    };
-    info!("[{channel}] Response: {resp_truncated}");
+    let (tx, rx) = tokio::sync::oneshot::channel();
 
-    (StatusCode::OK, Json(json!({"response": response.text})))
+    // Check for cross-channel conversation: if the same sender has an active
+    // request on a different channel, priority-enqueue so it processes next.
+    let priority = state
+        .tracker
+        .has_active_on_other_channel(&sender, &channel)
+        .await;
+
+    let queued = QueuedRequest {
+        channel: channel.clone(),
+        sender,
+        metadata,
+        callback,
+        prompt: final_prompt,
+        original_message: message,
+        respond: tx,
+    };
+
+    if priority {
+        state.queue.send_priority(queued).await;
+    } else {
+        state.queue.send(queued).await;
+    }
+
+    match rx.await {
+        Ok(response_text) => {
+            let resp_truncated = truncate_str(&response_text, 120);
+            info!("[{channel}] Response: {resp_truncated}");
+
+            (StatusCode::OK, Json(json!({"response": response_text})))
+        }
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"response": "Worker dropped the request"})),
+        ),
+    }
+}
+
+/// Truncate a string to at most `max_bytes` bytes at a char boundary.
+fn truncate_str(s: &str, max_bytes: usize) -> String {
+    if s.len() <= max_bytes {
+        s.to_string()
+    } else {
+        let end = s.floor_char_boundary(max_bytes);
+        format!("{}...", &s[..end])
+    }
 }

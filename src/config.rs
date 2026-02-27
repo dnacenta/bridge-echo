@@ -11,6 +11,14 @@ pub struct Config {
     pub discord_bot_token: Option<String>,
     pub discord_alert_channel: Option<String>,
     pub alert_thresholds_minutes: Vec<u64>,
+    /// URL of voice-echo for cross-channel audio injection.
+    /// When set, enables routing responses to active voice calls.
+    pub voice_echo_url: Option<String>,
+    /// Bearer token for authenticating with voice-echo's API.
+    pub voice_echo_token: Option<String>,
+    /// Voice session timeout in seconds. If no voice activity for this
+    /// long, the session is considered expired. Default: 300 (5 minutes).
+    pub voice_session_timeout_secs: u64,
 }
 
 impl Config {
@@ -40,6 +48,14 @@ impl Config {
             .filter_map(|s| s.trim().parse::<u64>().ok())
             .collect();
 
+        let voice_echo_url = env::var("BRIDGE_ECHO_VOICE_URL").ok();
+        let voice_echo_token = env::var("BRIDGE_ECHO_VOICE_TOKEN").ok();
+
+        let voice_session_timeout_secs = env::var("BRIDGE_ECHO_VOICE_SESSION_TIMEOUT")
+            .unwrap_or_else(|_| "300".into())
+            .parse::<u64>()
+            .map_err(|e| format!("invalid BRIDGE_ECHO_VOICE_SESSION_TIMEOUT: {e}"))?;
+
         Ok(Self {
             host: env::var("BRIDGE_ECHO_HOST").unwrap_or_else(|_| "0.0.0.0".into()),
             port,
@@ -50,6 +66,9 @@ impl Config {
             discord_bot_token,
             discord_alert_channel,
             alert_thresholds_minutes,
+            voice_echo_url,
+            voice_echo_token,
+            voice_session_timeout_secs,
         })
     }
 }

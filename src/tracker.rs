@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 pub struct ActiveRequest {
     pub id: u64,
     pub channel: String,
+    pub sender: String,
     pub message_preview: String,
     pub started_at: Instant,
     pub started_unix: u64,
@@ -53,7 +54,7 @@ impl RequestTracker {
         }
     }
 
-    pub async fn start(&self, channel: &str, message: &str) -> u64 {
+    pub async fn start(&self, channel: &str, sender: &str, message: &str) -> u64 {
         let mut inner = self.inner.write().await;
         let id = inner.next_id;
         inner.next_id += 1;
@@ -72,6 +73,7 @@ impl RequestTracker {
         inner.active.push(ActiveRequest {
             id,
             channel: channel.to_string(),
+            sender: sender.to_string(),
             message_preview: preview,
             started_at: Instant::now(),
             started_unix: now_unix,
@@ -79,6 +81,16 @@ impl RequestTracker {
         });
 
         id
+    }
+
+    /// Check if a sender has an active request on a different channel.
+    /// Used for multi-channel conversation detection.
+    pub async fn has_active_on_other_channel(&self, sender: &str, channel: &str) -> bool {
+        let inner = self.inner.read().await;
+        inner
+            .active
+            .iter()
+            .any(|r| r.sender == sender && r.channel != channel)
     }
 
     pub async fn complete(&self, id: u64, response: &str) {
