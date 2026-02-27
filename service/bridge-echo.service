@@ -1,16 +1,25 @@
+# bridge-echo — HTTP bridge for Claude Code CLI
+#
+# Copy this file to /etc/systemd/system/bridge-echo.service
+# and replace the placeholders below with your actual values.
+#
+# Then:
+#   systemctl daemon-reload
+#   systemctl enable --now bridge-echo
+
 [Unit]
 Description=bridge-echo — HTTP bridge for Claude Code CLI
 After=network.target
 
 [Service]
 Type=simple
-User=echo
-WorkingDirectory=/home/echo
+User=%i
+WorkingDirectory=/home/%i
 ExecStart=/usr/local/bin/bridge-echo
 Environment=RUST_LOG=bridge_echo=info
-Environment=BRIDGE_ECHO_SELF_PATH=/home/echo/SELF.md
-Environment=BRIDGE_ECHO_HOME=/home/echo
-Environment=PATH=/home/echo/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Environment=BRIDGE_ECHO_SELF_PATH=/path/to/SELF.md
+# Environment=BRIDGE_ECHO_HOME=/home/youruser
+# Environment=BRIDGE_ECHO_CLAUDE_BIN=/path/to/claude
 Restart=on-failure
 RestartSec=5
 

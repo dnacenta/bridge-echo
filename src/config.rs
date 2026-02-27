@@ -32,7 +32,7 @@ impl Config {
 
         let home = env::var("BRIDGE_ECHO_HOME")
             .or_else(|_| env::var("HOME"))
-            .unwrap_or_else(|_| "/home/echo".into());
+            .unwrap_or_else(|_| ".".into());
 
         Ok(Self {
             host: env::var("BRIDGE_ECHO_HOST").unwrap_or_else(|_| "0.0.0.0".into()),
