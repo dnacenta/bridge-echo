@@ -1,6 +1,4 @@
-use std::time::Duration;
 use tokio::process::Command;
-use tokio::time::timeout;
 use tracing::warn;
 
 pub struct ClaudeResponse {
@@ -12,7 +10,6 @@ pub async fn invoke(
     claude_bin: &str,
     prompt: &str,
     home: &str,
-    timeout_secs: u64,
     session_id: Option<&str>,
     self_doc: Option<&str>,
 ) -> ClaudeResponse {
@@ -35,8 +32,8 @@ pub async fn invoke(
     cmd.env("HOME", home);
     cmd.current_dir(home);
 
-    let result = match timeout(Duration::from_secs(timeout_secs), cmd.output()).await {
-        Ok(Ok(output)) => {
+    match cmd.output().await {
+        Ok(output) => {
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
                 return ClaudeResponse {
@@ -52,17 +49,11 @@ pub async fn invoke(
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             parse_output(&stdout)
         }
-        Ok(Err(e)) => ClaudeResponse {
+        Err(e) => ClaudeResponse {
             text: format!("Error running Claude: {e}"),
             session_id: None,
         },
-        Err(_) => ClaudeResponse {
-            text: "Request timed out after 10 minutes.".into(),
-            session_id: None,
-        },
-    };
-
-    result
+    }
 }
 
 fn parse_output(stdout: &str) -> ClaudeResponse {

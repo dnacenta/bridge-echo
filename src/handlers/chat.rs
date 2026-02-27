@@ -54,15 +54,18 @@ pub async fn chat(
         .as_deref()
         .and_then(|path| std::fs::read_to_string(path).ok());
 
+    let request_id = state.tracker.start(&channel, &message).await;
+
     let response = claude::invoke(
         &state.config.claude_bin,
         &final_prompt,
         &state.config.home,
-        state.config.timeout_secs,
         session_id.as_deref(),
         self_doc.as_deref(),
     )
     .await;
+
+    state.tracker.complete(request_id, &response.text).await;
 
     if let Some(sid) = &response.session_id {
         state.sessions.set(&channel, sid.clone()).await;
