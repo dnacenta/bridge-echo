@@ -131,7 +131,8 @@ async fn worker(
         last_used = Instant::now();
 
         let truncated = if response.text.len() > 120 {
-            format!("{}...", &response.text[..120])
+            let end = response.text.floor_char_boundary(120);
+            format!("{}...", &response.text[..end])
         } else {
             response.text.clone()
         };
@@ -184,21 +185,71 @@ async fn worker(
 
         // Route response via callback if configured
         if let Some(cb) = &req.callback {
-            if cb.callback_type == "webhook" {
-                if let Some(url) = &cb.url {
-                    let payload = serde_json::json!({
-                        "response": &response.text,
-                        "channel": &req.channel,
-                        "sender": &req.sender,
-                        "metadata": {
-                            "call_sid": &req.metadata.call_sid,
-                            "discord_channel_id": &req.metadata.discord_channel_id,
-                            "workflow_id": &req.metadata.workflow_id,
+            match cb.callback_type.as_str() {
+                "discord" => {
+                    if !injected {
+                        if let Some(channel_id) = &req.metadata.discord_channel_id {
+                            if let Some(ref token) = config.discord_bot_token {
+                                let url = format!(
+                                    "https://discord.com/api/v10/channels/{}/messages",
+                                    channel_id
+                                );
+                                for chunk in chunk_text(&response.text, 2000) {
+                                    let payload = serde_json::json!({ "content": chunk });
+                                    match http_client
+                                        .post(&url)
+                                        .header("Authorization", format!("Bot {}", token))
+                                        .json(&payload)
+                                        .send()
+                                        .await
+                                    {
+                                        Ok(resp) if resp.status().is_success() => {}
+                                        Ok(resp) => {
+                                            warn!(
+                                                "[{}] Discord callback failed (HTTP {})",
+                                                req.channel,
+                                                resp.status()
+                                            );
+                                        }
+                                        Err(e) => {
+                                            warn!("[{}] Discord callback error: {e}", req.channel);
+                                        }
+                                    }
+                                }
+                                info!("[{}] Response delivered via Discord callback", req.channel);
+                            } else {
+                                warn!(
+                                    "[{}] Discord callback requested but no bot token configured",
+                                    req.channel
+                                );
+                            }
+                        } else {
+                            warn!(
+                                "[{}] Discord callback requested but no channel_id in metadata",
+                                req.channel
+                            );
                         }
-                    });
-                    if let Err(e) = http_client.post(url).json(&payload).send().await {
-                        warn!("Callback webhook failed: {e}");
                     }
+                }
+                "webhook" => {
+                    if let Some(url) = &cb.url {
+                        let payload = serde_json::json!({
+                            "response": &response.text,
+                            "channel": &req.channel,
+                            "sender": &req.sender,
+                            "metadata": {
+                                "call_sid": &req.metadata.call_sid,
+                                "discord_channel_id": &req.metadata.discord_channel_id,
+                                "workflow_id": &req.metadata.workflow_id,
+                            }
+                        });
+                        if let Err(e) = http_client.post(url).json(&payload).send().await {
+                            warn!("Callback webhook failed: {e}");
+                        }
+                    }
+                }
+                other => {
+                    warn!("[{}] Unknown callback type: {other}", req.channel);
                 }
             }
         }
@@ -211,4 +262,20 @@ async fn worker(
             let _ = req.respond.send(response.text);
         }
     }
+}
+
+/// Split text into chunks of at most `max_len` bytes, splitting at char boundaries.
+fn chunk_text(text: &str, max_len: usize) -> Vec<&str> {
+    let mut chunks = Vec::new();
+    let mut start = 0;
+    while start < text.len() {
+        let end = if start + max_len >= text.len() {
+            text.len()
+        } else {
+            text.floor_char_boundary(start + max_len)
+        };
+        chunks.push(&text[start..end]);
+        start = end;
+    }
+    chunks
 }

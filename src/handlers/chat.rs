@@ -89,12 +89,22 @@ pub async fn chat(
         respond: tx,
     };
 
+    let has_callback = queued.callback.is_some();
+
     if priority {
         state.queue.send_priority(queued).await;
     } else {
         state.queue.send(queued).await;
     }
 
+    // Async mode: if callback is present, return 202 immediately.
+    // The worker will deliver the response via the callback.
+    if has_callback {
+        info!("[{channel}] Async mode — returning 202, response via callback");
+        return (StatusCode::ACCEPTED, Json(json!({"status": "accepted"})));
+    }
+
+    // Sync mode: wait for the worker to produce a response.
     match rx.await {
         Ok(response_text) => {
             let resp_truncated = truncate_str(&response_text, 120);

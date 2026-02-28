@@ -31,7 +31,7 @@ pub async fn run(once: bool) {
                         if once {
                             std::process::exit(1);
                         }
-                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                         continue;
                     }
                 };
@@ -44,8 +44,9 @@ pub async fn run(once: bool) {
                 }
             }
             Err(e) => {
-                eprintln!("{RED}connection failed:{RESET} {e}");
-                eprintln!("{DIM}is bridge-echo running?{RESET}");
+                println!("{BOLD}{BLUE}bridge-echo{RESET}");
+                println!();
+                println!("{RED}● offline{RESET} {DIM}— {e}{RESET}");
                 if once {
                     std::process::exit(1);
                 }
@@ -56,70 +57,40 @@ pub async fn run(once: bool) {
             break;
         }
 
-        println!();
-        println!("{DIM}refreshing every 2s — Ctrl+C to exit{RESET}");
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
 }
 
 fn render(data: &serde_json::Value) {
     let active = data["active"].as_array();
-    let completed = data["completed"].as_array();
+    let active_count = active.map(|a| a.len()).unwrap_or(0);
 
-    println!("{BOLD}{BLUE}bridge-echo monitor{RESET}");
-    println!("{DIM}─────────────────────────────────────────────────{RESET}");
+    println!("{BOLD}{BLUE}bridge-echo{RESET}");
     println!();
 
-    // Active requests
-    let active_count = active.map(|a| a.len()).unwrap_or(0);
-    if active_count > 0 {
-        println!(
-            "{BOLD}{ORANGE}● {active_count} active request{}{RESET}",
-            if active_count == 1 { "" } else { "s" }
-        );
-        println!();
-
+    if active_count == 0 {
+        println!("{GREEN}● idle{RESET}");
+    } else {
         for req in active.unwrap() {
-            let id = req["id"].as_u64().unwrap_or(0);
             let channel = req["channel"].as_str().unwrap_or("?");
             let preview = req["message_preview"].as_str().unwrap_or("");
             let elapsed = req["elapsed_secs"].as_u64().unwrap_or(0);
 
             let elapsed_str = fmt_duration(elapsed);
-            let color = if elapsed >= 600 { RED } else { ORANGE };
+            let (color, label) = if elapsed >= 600 {
+                (RED, "stuck")
+            } else if elapsed >= 300 {
+                (ORANGE, "active")
+            } else {
+                (GREEN, "active")
+            };
 
-            println!("  {BOLD}#{id}{RESET}  {PURPLE}{channel}{RESET}  {color}{elapsed_str}{RESET}");
-            println!("  {GRAY}{preview}{RESET}");
-            println!();
-        }
-    } else {
-        println!("{DIM}no active requests{RESET}");
-        println!();
-    }
-
-    // Completed requests
-    let completed_count = completed.map(|c| c.len()).unwrap_or(0);
-    println!("{BOLD}{GREEN}✓ {completed_count} completed{RESET} {DIM}(last 50){RESET}");
-    println!();
-
-    if let Some(items) = completed {
-        for req in items.iter().rev().take(10) {
-            let id = req["id"].as_u64().unwrap_or(0);
-            let channel = req["channel"].as_str().unwrap_or("?");
-            let msg = req["message_preview"].as_str().unwrap_or("");
-            let resp = req["response_preview"].as_str().unwrap_or("");
-            let duration = req["duration_secs"].as_u64().unwrap_or(0);
-
-            let duration_str = fmt_duration(duration);
-
-            println!("  {DIM}#{id}{RESET}  {PURPLE}{channel}{RESET}  {GREEN}{duration_str}{RESET}");
-            println!("  {GRAY}→ {msg}{RESET}");
-            println!("  {GRAY}← {resp}{RESET}");
-            println!();
-        }
-
-        if completed_count > 10 {
-            println!("  {DIM}... and {} more{RESET}", completed_count - 10);
+            println!(
+                "{color}● {label}{RESET}  {color}{elapsed_str}{RESET}  {PURPLE}{channel}{RESET}"
+            );
+            if !preview.is_empty() {
+                println!("  {GRAY}{preview}{RESET}");
+            }
         }
     }
 }
@@ -128,7 +99,7 @@ fn fmt_duration(secs: u64) -> String {
     let m = secs / 60;
     let s = secs % 60;
     if m > 0 {
-        format!("{m}m {s}s")
+        format!("{m}m {s:02}s")
     } else {
         format!("{s}s")
     }
