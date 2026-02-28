@@ -1,6 +1,6 @@
 # bridge-echo
 
-[![License: MIT](https://img.shields.io/github/license/dnacenta/bridge-echo)](LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/github/license/dnacenta/bridge-echo)](LICENSE)
 [![Version](https://img.shields.io/github/v/tag/dnacenta/bridge-echo?label=version&color=green)](https://github.com/dnacenta/bridge-echo/tags)
 [![Crates.io](https://img.shields.io/crates/v/bridge-echo)](https://crates.io/crates/bridge-echo)
 
@@ -182,4 +182,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE)
+[AGPL-3.0](LICENSE)
